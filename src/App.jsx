@@ -341,8 +341,8 @@ export default function App() {
         {/* Inputs */}
         <div style={{ paddingBottom: 110 }}>
           <Section title="Billets"          keys={billets}  quantities={quantities} onChange={handleChange} />
-          <Section title="Rouleaux"         keys={rouleaux} quantities={quantities} onChange={handleChange} />
           <Section title="Pièces détachées" keys={pieces}   quantities={quantities} onChange={handleChange} />
+          <Section title="Rouleaux"         keys={rouleaux} quantities={quantities} onChange={handleChange} />
         </div>
 
         {/* Bottom bar */}
