@@ -27,11 +27,19 @@ function computeFloat(quantities) {
   const floatAlloc = {};
   const depotAlloc = {};
   for (const d of DENOMINATIONS) {
-    floatAlloc[d.label] = 0;
-    depotAlloc[d.label] = quantities[d.label] || 0;
+    if (d.type === "rouleau") {
+      floatAlloc[d.label] = quantities[d.label] || 0;
+      depotAlloc[d.label] = 0;
+    } else {
+      floatAlloc[d.label] = 0;
+      depotAlloc[d.label] = quantities[d.label] || 0;
+    }
   }
-  let remaining = FLOAT_TARGET;
-  for (const d of DENOMINATIONS) {
+  const rouleauTotal = DENOMINATIONS.filter(d => d.type === "rouleau")
+    .reduce((sum, d) => sum + floatAlloc[d.label] * d.value, 0);
+  let remaining = FLOAT_TARGET - rouleauTotal;
+  const nonRouleau = DENOMINATIONS.filter(d => d.type !== "rouleau");
+  for (const d of nonRouleau) {
     if (remaining <= 0) break;
     const available = depotAlloc[d.label];
     const use = Math.min(available, Math.floor(remaining / d.value));
@@ -40,7 +48,7 @@ function computeFloat(quantities) {
     remaining -= use * d.value;
   }
   if (remaining === 0) return { floatAlloc, depotAlloc };
-  for (const d of DENOMINATIONS) {
+  for (const d of nonRouleau) {
     if (remaining <= 0) break;
     if (depotAlloc[d.label] === 0) continue;
     if (d.value < remaining) continue;
@@ -51,7 +59,7 @@ function computeFloat(quantities) {
   }
   if (remaining < 0) {
     let overshoot = -remaining;
-    for (const d of [...DENOMINATIONS].reverse()) {
+    for (const d of [...nonRouleau].reverse()) {
       if (overshoot <= 0) break;
       const canGiveBack = Math.min(floatAlloc[d.label], Math.floor(overshoot / d.value));
       floatAlloc[d.label] -= canGiveBack;
