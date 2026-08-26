@@ -170,6 +170,22 @@ function useTheme() {
   return useContext(ThemeContext);
 }
 
+function AppFooter() {
+  const { t } = useTheme();
+  return (
+    <div style={{
+      padding: "18px 16px 28px",
+      textAlign: "center",
+      borderTop: `1px solid ${t.border}`,
+      fontSize: 11,
+      color: t.textFaint,
+      letterSpacing: 0.3,
+    }}>
+      Fait par Rayane Amrani
+    </div>
+  );
+}
+
 const globalStyles = `
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   input:focus { outline: none; }
@@ -1414,6 +1430,7 @@ export default function App() {
         <div key={section} className="fade-in">
           <ActiveView activeSection={section} onSectionChange={setSection} />
         </div>
+        <AppFooter />
       </div>
     </ThemeContext.Provider>
   );
