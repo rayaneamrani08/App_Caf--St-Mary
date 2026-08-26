@@ -22,30 +22,40 @@ async function writeHistory(history) {
 }
 
 export default async function handler(req, res) {
-  if (req.method === "GET") {
-    const history = await readHistory();
-    return res.status(200).json({ history });
-  }
-
-  if (req.method === "POST") {
-    const entry = req.body;
-    if (!entry || typeof entry !== "object" || !entry.id) {
-      return res.status(400).json({ error: "Entrée invalide." });
+  try {
+    if (req.method === "GET") {
+      const history = await readHistory();
+      return res.status(200).json({ history });
     }
-    const history = await readHistory();
-    const next = [entry, ...history].slice(0, MAX_ENTRIES);
-    await writeHistory(next);
-    return res.status(200).json({ history: next });
-  }
 
-  if (req.method === "DELETE") {
-    const { id } = req.query;
-    const history = await readHistory();
-    const next = id ? history.filter(e => e.id !== id) : [];
-    await writeHistory(next);
-    return res.status(200).json({ history: next });
-  }
+    if (req.method === "POST") {
+      const entry = req.body;
+      if (!entry || typeof entry !== "object" || !entry.id) {
+        return res.status(400).json({ error: "Entrée invalide." });
+      }
+      const history = await readHistory();
+      const next = [entry, ...history].slice(0, MAX_ENTRIES);
+      await writeHistory(next);
+      return res.status(200).json({ history: next });
+    }
 
-  res.setHeader("Allow", "GET, POST, DELETE");
-  return res.status(405).json({ error: "Méthode non autorisée." });
+    if (req.method === "DELETE") {
+      const expectedPin = process.env.CASH_CLEAR_PIN;
+      const providedPin = req.headers["x-pin"];
+      if (!expectedPin || providedPin !== expectedPin) {
+        return res.status(401).json({ error: "Code PIN invalide." });
+      }
+      const { id } = req.query;
+      const history = await readHistory();
+      const next = id ? history.filter(e => e.id !== id) : [];
+      await writeHistory(next);
+      return res.status(200).json({ history: next });
+    }
+
+    res.setHeader("Allow", "GET, POST, DELETE");
+    return res.status(405).json({ error: "Méthode non autorisée." });
+  } catch (err) {
+    console.error("cash-history handler error:", err);
+    return res.status(500).json({ error: err?.message || "Erreur serveur inconnue." });
+  }
 }

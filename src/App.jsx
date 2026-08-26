@@ -291,6 +291,81 @@ function InfoCard({ title, children, accent }) {
   );
 }
 
+function PinModal({ open, title, onConfirm, onClose }) {
+  const { t } = useTheme();
+  const [value, setValue] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (open) { setValue(""); setError(""); setLoading(false); }
+  }, [open]);
+
+  if (!open) return null;
+
+  const submit = async () => {
+    if (!value || loading) return;
+    setLoading(true);
+    setError("");
+    const result = await onConfirm(value);
+    if (result === "wrong-pin") {
+      setError("Code incorrect.");
+      setValue("");
+      setLoading(false);
+    } else if (result === "error") {
+      setError("La suppression a échoué. Réessaie.");
+      setLoading(false);
+    }
+    // "ok" — caller closes the modal
+  };
+
+  return (
+    <>
+      <div
+        onClick={loading ? undefined : onClose}
+        style={{ position: "fixed", inset: 0, zIndex: 40, background: "rgba(0,0,0,0.5)" }}
+      />
+      <div className="slide-up" style={{
+        position: "fixed", left: "50%", top: "50%", transform: "translate(-50%, -50%)",
+        zIndex: 41, width: "calc(100% - 48px)", maxWidth: 320,
+        background: t.bgElevated, border: `1px solid ${t.borderStrong}`, borderRadius: 18,
+        padding: 20, boxShadow: `0 16px 48px ${t.shadow}`,
+      }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: t.textPrimary, marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 12, color: t.textMuted, marginBottom: 14 }}>
+          Entre le code PIN pour confirmer cette suppression.
+        </div>
+        <input
+          type="password"
+          inputMode="numeric"
+          pattern="[0-9]*"
+          autoFocus
+          disabled={loading}
+          aria-label="Code PIN"
+          value={value}
+          onChange={e => { setValue(e.target.value.replace(/\D/g, "")); setError(""); }}
+          onKeyDown={e => { if (e.key === "Enter") submit(); }}
+          style={{
+            width: "100%", textAlign: "center", letterSpacing: 8,
+            fontSize: 20, fontWeight: 700, fontVariantNumeric: "tabular-nums",
+            padding: "12px", borderRadius: 10,
+            border: `1.5px solid ${error ? t.danger : t.borderInput}`,
+            background: t.bgInput, color: t.textPrimary,
+            marginBottom: error ? 6 : 14,
+          }}
+        />
+        {error && (
+          <div style={{ fontSize: 12, color: t.danger, marginBottom: 10 }}>{error}</div>
+        )}
+        <div style={{ display: "flex", gap: 10 }}>
+          <Btn variant="ghost" onClick={onClose} disabled={loading}>Annuler</Btn>
+          <Btn variant="danger" onClick={submit} disabled={loading}>{loading ? "…" : "Confirmer"}</Btn>
+        </div>
+      </div>
+    </>
+  );
+}
+
 function StepList({ steps }) {
   const { t } = useTheme();
   return (
@@ -899,7 +974,7 @@ function ScheduleView({ activeSection, onSectionChange }) {
   useEffect(() => {
     let cancelled = false;
     fetch("/api/schedule")
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(data => { if (!cancelled) setImage(data.url || null); })
       .catch(() => { if (!cancelled) setError("Impossible de charger l'horaire. Vérifie ta connexion."); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -1018,11 +1093,12 @@ function CashHistoryView({ activeSection, onSectionChange }) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [expanded, setExpanded] = useState(() => new Set());
+  const [pinAction, setPinAction] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
     fetch("/api/cash-history")
-      .then(r => r.json())
+      .then(r => { if (!r.ok) throw new Error(); return r.json(); })
       .then(data => { if (!cancelled) setHistory(data.history || []); })
       .catch(() => { if (!cancelled) setError("Impossible de charger l'historique. Vérifie ta connexion."); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -1037,28 +1113,35 @@ function CashHistoryView({ activeSection, onSectionChange }) {
     });
   };
 
-  const removeEntry = async (id) => {
-    const previous = history;
-    setHistory(h => h.filter(e => e.id !== id));
+  const removeEntry = async (id, pin) => {
     try {
-      const res = await fetch(`/api/cash-history?id=${encodeURIComponent(id)}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      const res = await fetch(`/api/cash-history?id=${encodeURIComponent(id)}`, {
+        method: "DELETE",
+        headers: { "x-pin": pin },
+      });
+      if (res.status === 401) return "wrong-pin";
+      if (!res.ok) return "error";
+      const data = await res.json();
+      setHistory(data.history || []);
+      return "ok";
     } catch {
-      setHistory(previous);
-      setError("La suppression a échoué. Réessaie.");
+      return "error";
     }
   };
 
-  const clearAll = async () => {
-    if (!window.confirm("Effacer tout l'historique des comptages ?")) return;
-    const previous = history;
-    setHistory([]);
+  const clearAll = async (pin) => {
     try {
-      const res = await fetch("/api/cash-history", { method: "DELETE" });
-      if (!res.ok) throw new Error();
+      const res = await fetch("/api/cash-history", {
+        method: "DELETE",
+        headers: { "x-pin": pin },
+      });
+      if (res.status === 401) return "wrong-pin";
+      if (!res.ok) return "error";
+      const data = await res.json();
+      setHistory(data.history || []);
+      return "ok";
     } catch {
-      setHistory(previous);
-      setError("La suppression a échoué. Réessaie.");
+      return "error";
     }
   };
 
@@ -1076,7 +1159,11 @@ function CashHistoryView({ activeSection, onSectionChange }) {
         ) : (
           <>
             <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
-              <Btn variant="danger" onClick={clearAll} style={{ width: "auto", padding: "8px 14px", fontSize: 12 }}>
+              <Btn
+                variant="danger"
+                onClick={() => setPinAction({ title: "Effacer tout l'historique", run: clearAll })}
+                style={{ width: "auto", padding: "8px 14px", fontSize: 12 }}
+              >
                 Tout effacer
               </Btn>
             </div>
@@ -1099,7 +1186,7 @@ function CashHistoryView({ activeSection, onSectionChange }) {
                     <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                       <div style={{ fontSize: 16, fontWeight: 700, color: t.accentGold, fontVariantNumeric: "tabular-nums" }}>{fmt(entry.totalCents)}</div>
                       <button
-                        onClick={(e) => { e.stopPropagation(); removeEntry(entry.id); }}
+                        onClick={(e) => { e.stopPropagation(); setPinAction({ title: "Supprimer ce comptage", run: (pin) => removeEntry(entry.id, pin) }); }}
                         aria-label="Supprimer ce comptage"
                         style={{
                           display: "flex", alignItems: "center", justifyContent: "center",
@@ -1121,6 +1208,16 @@ function CashHistoryView({ activeSection, onSectionChange }) {
           </>
         )}
       </div>
+      <PinModal
+        open={!!pinAction}
+        title={pinAction?.title}
+        onClose={() => setPinAction(null)}
+        onConfirm={async (pin) => {
+          const result = await pinAction.run(pin);
+          if (result === "ok") setPinAction(null);
+          return result;
+        }}
+      />
     </div>
   );
 }
